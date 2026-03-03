@@ -14,6 +14,7 @@ import {
 import { useWalletStore } from "../../src/stores/wallet-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useWallet } from "../../src/hooks/useWallet";
 
 function ConnectButton({
@@ -192,7 +193,7 @@ type ListItem =
   const isEmpty = balance === null && listData === null;
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container}>
       {address ? (
         <Text style={s.addressHeader} numberOfLines={1}>{address}</Text>
       ) : null}
@@ -278,7 +279,7 @@ type ListItem =
           />
         ) : null}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -286,7 +287,6 @@ const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0D0D12",
-    paddingTop: 60,
     paddingHorizontal: 16,
   },
   addressHeader: {
