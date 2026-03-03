@@ -8,12 +8,32 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Linking,
+  Image,
 } from "react-native";
+import { useWalletStore } from "../../src/stores/wallet-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-const RPC = "https://api.mainnet-beta.solana.com";
-const DEMO = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+
+ 
+export default function WalletScreen() {
+  const router = useRouter();
+  const [input, setInput] = useState("");
+  const [address, setAddress] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [listData, setListData] = useState<ListItem[] | null>(null);
+
+   const addToHistory = useWalletStore((s) => s.addToHistory);
+  const searchHistory = useWalletStore((s) => s.searchHistory);
+  const isDevnet = useWalletStore((s) => s.isDevnet);
+
+  console.log("[Zustand] isDevnet:", isDevnet);
+  console.log("[Zustand] searchHistory:", searchHistory);
+
+// const RPC = "https://api.mainnet-beta.solana.com";
+const RPC = isDevnet ? "https://api.devnet.solana.com":"https://api.mainnet-beta.solana.com";
 
 const rpc = async (method: string, params: any[]) => {
   const res = await fetch(RPC, {
@@ -46,18 +66,31 @@ async function fetchTokens(address: string) {
   });
 }
 
-const truncate = (addr: string) =>
-  `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+async function fetchTransactions(address: string) {
+  const sigs = await rpc("getSignaturesForAddress", [address, { limit: 10 }]);
+  return (sigs as any[]).map((s: any) => ({
+    signature: s.signature as string,
+    blockTime: s.blockTime
+      ? new Date(s.blockTime * 1000).toLocaleString()
+      : "Pending",
+    err: s.err,
+  }));
+}
 
+const truncate = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 const isHighValue = (amount: string) => parseFloat(amount) >= 1_000_000;
 
-export default function WalletScreen() {
-  const router = useRouter();
-  const [input, setInput] = useState("");
-  const [address, setAddress] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [tokens, setTokens] = useState<any[] | null>(null);
+type ListItem =
+  | { type: "section"; title: string }
+  | { type: "token"; mint: string; amount: string }
+  | { type: "txn"; signature: string; blockTime: string; err: any };
+
+
+  const handleSearch = async (address:string)=>{
+    addToHistory(address);
+    search();
+  }
+
 
   const search = async (addr?: string) => {
     const target = (addr ?? input).trim();
@@ -65,12 +98,19 @@ export default function WalletScreen() {
     setLoading(true);
     setAddress(target);
     try {
-      const [bal, toks] = await Promise.all([
+      const [bal, toks, txns] = await Promise.all([
         fetchBalance(target),
         fetchTokens(target),
+        fetchTransactions(target),
       ]);
       setBalance(bal);
-      setTokens(toks);
+      const items: ListItem[] = [
+        { type: "section", title: "Tokens" },
+        ...toks.map((t) => ({ type: "token" as const, ...t })),
+        { type: "section", title: "Recent Transactions" },
+        ...txns.map((t) => ({ type: "txn" as const, ...t })),
+      ];
+      setListData(items);
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {
@@ -78,22 +118,54 @@ export default function WalletScreen() {
     }
   };
 
-  const loadDemo = () => {
-    setInput(DEMO);
-    search(DEMO);
+  const renderItem = ({ item }: { item: ListItem }) => {
+    if (item.type === "section") {
+      return <Text style={s.sectionTitle}>{item.title}</Text>;
+    }
+    if (item.type === "token") {
+      return (
+        <TouchableOpacity
+          style={s.row}
+          onPress={() => router.push(`/token/${item.mint}`)}
+        >
+          <Text style={s.rowLeft}>{truncate(item.mint)}</Text>
+          <Text style={[s.rowRight, isHighValue(item.amount) && s.highValue]}>
+            {item.amount}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        style={s.row}
+        onPress={() => Linking.openURL(`https://solscan.io/tx/${item.signature}`)}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={s.rowLeft}>{truncate(item.signature)}</Text>
+          <Text style={s.rowSub}>{item.blockTime}</Text>
+        </View>
+        <Text style={item.err ? s.failed : s.success}>
+          {item.err ? "Failed" : "Success"}
+        </Text>
+      </TouchableOpacity>
+    );
   };
+
+  const isEmpty = balance === null && listData === null;
 
   return (
     <View style={s.container}>
-
-      {/* Address header */}
       {address ? (
-        <Text style={s.addressHeader} numberOfLines={1}>
-          {address}
-        </Text>
+        <Text style={s.addressHeader} numberOfLines={1}>{address}</Text>
       ) : null}
 
-      {/* Search row */}
+      {isDevnet && (
+        <View style={s.devnetBanner}>
+          <Text style={s.devnetText}>🔧 DEVNET</Text>
+        </View>
+      )}
+
+
       <View style={s.searchRow}>
         <TextInput
           style={s.searchInput}
@@ -103,54 +175,47 @@ export default function WalletScreen() {
           onChangeText={setInput}
           autoCapitalize="none"
           autoCorrect={false}
-          onSubmitEditing={() => search()}
+          onSubmitEditing={() => handleSearch(input)}
         />
-        <TouchableOpacity style={s.searchBtn} onPress={() => search()}>
+        <TouchableOpacity style={s.searchBtn} onPress={() => handleSearch(input)}>
           <Ionicons name="search" size={18} color="#000" />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.demoBtn} onPress={loadDemo}>
-          <Text style={s.demoBtnText}>Demo</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      {loading ? (
-        <ActivityIndicator size="large" color="#14F195" style={s.loader} />
-      ) : balance !== null && tokens !== null ? (
-        <FlatList
-          data={tokens}
-          keyExtractor={(_, i) => i.toString()}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <View style={s.balanceCard}>
-              <Text style={s.balanceLabel}>SOL BALANCE</Text>
-              <Text style={s.balanceValue}>
-                {balance.toFixed(4)}
-                <Text style={s.solSuffix}> SOL</Text>
-              </Text>
-              <Text style={s.balanceAddress}>{truncate(address)}</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity style={s.tokenRow} onPress={()=>{
-              router.push(`/token/${item.mint}`);
-            }}>
-              <Text style={s.tokenMint}>{truncate(item.mint)}</Text>
-              <Text
-                style={[
-                  s.tokenAmount,
-                  isHighValue(item.amount) && s.highValue,
-                ]}
-              >
-                {item.amount}
-              </Text>
-            </TouchableOpacity>//button touch able button 
-          )}
-          ListEmptyComponent={
-            <Text style={s.empty}>No tokens found</Text>
-          }
-        />
-      ) : null}
+      <View style={s.content}>
+        {loading ? (
+          <ActivityIndicator size="large" color="#14F195" />
+        ) : isEmpty ? (
+          <View style={s.emptyState}>
+            {/* <Image
+              source={require("../../assets/videoframe_12107.png")}
+              style={s.emptyImage}
+              resizeMode="contain"
+            /> */}
+            {/* <Text style={s.emptyTitle}>Search a Wallet</Text>
+            <Text style={s.emptySubtitle}>
+              Enter a Solana address above to view balance, tokens and transactions
+            </Text> */}
+          </View>
+        ) : balance !== null && listData !== null ? (
+          <FlatList
+            data={listData}
+            keyExtractor={(_, i) => i.toString()}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View style={s.balanceCard}>
+                <Text style={s.balanceLabel}>SOL BALANCE</Text>
+                <Text style={s.balanceValue}>
+                  {balance.toFixed(4)}
+                  <Text style={s.solSuffix}> SOL</Text>
+                </Text>
+                <Text style={s.balanceAddress}>{truncate(address)}</Text>
+              </View>
+            }
+            renderItem={renderItem}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -192,23 +257,33 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  demoBtn: {
-    backgroundColor: "#252530",
-    paddingHorizontal: 14,
-    height: 44,
-    borderRadius: 12,
+  content: {
+    flex: 1,
+  },
+  emptyState: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#2A2A35",
+    paddingHorizontal: 8,
   },
-  demoBtnText: {
+  emptyImage: {
+    width: "100%",
+    height: 260,
+    marginBottom: 24,
+    borderRadius: 16,
+    alignSelf: "center",
+  },
+  emptyTitle: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 8,
   },
-  loader: {
-    marginTop: 60,
+  emptySubtitle: {
+    color: "#6B7280",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
   },
   balanceCard: {
     backgroundColor: "#1A1A24",
@@ -240,7 +315,15 @@ const s = StyleSheet.create({
     color: "#9945FF",
     fontSize: 13,
   },
-  tokenRow: {
+  sectionTitle: {
+    color: "#6B7280",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -252,12 +335,17 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2A2A35",
   },
-  tokenMint: {
+  rowLeft: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "500",
   },
-  tokenAmount: {
+  rowSub: {
+    color: "#6B7280",
+    fontSize: 11,
+    marginTop: 3,
+  },
+  rowRight: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
@@ -265,10 +353,30 @@ const s = StyleSheet.create({
   highValue: {
     color: "#14F195",
   },
-  empty: {
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 15,
+  success: {
+    color: "#14F195",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  failed: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  devnetBanner: {
+    backgroundColor: "#F59E0B20",
+    borderWidth: 1,
+    borderColor: "#F59E0B50",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+  devnetText: {
+    color: "#F59E0B",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });
