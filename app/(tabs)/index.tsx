@@ -187,15 +187,27 @@ type ListItem =
           <ActivityIndicator size="large" color="#14F195" />
         ) : isEmpty ? (
           <View style={s.emptyState}>
-            {/* <Image
-              source={require("../../assets/videoframe_12107.png")}
-              style={s.emptyImage}
-              resizeMode="contain"
-            /> */}
-            {/* <Text style={s.emptyTitle}>Search a Wallet</Text>
-            <Text style={s.emptySubtitle}>
-              Enter a Solana address above to view balance, tokens and transactions
-            </Text> */}
+            {searchHistory.length > 0 ? (
+              <>
+                <Text style={s.recentLabel}>Recent Searches</Text>
+                {searchHistory.map((addr, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={s.historyRow}
+                    onPress={() => {
+                      setInput(addr);
+                      handleSearch(addr);
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={16} color="#6B7280" />
+                    <Text style={s.historyAddr}>{addr}</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#6B7280" />
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : (
+              <Text style={s.emptyHint}>Search a wallet address to get started</Text>
+            )}
           </View>
         ) : balance !== null && listData !== null ? (
           <FlatList
@@ -378,5 +390,37 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     letterSpacing: 0.5,
+  },
+  recentLabel: {
+    color: "#6B7280",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    marginBottom: 10,
+    alignSelf: "flex-start",
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1A24",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#2A2A35",
+    gap: 10,
+    width: "100%",
+  },
+  historyAddr: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 13,
+  },
+  emptyHint: {
+    color: "#6B7280",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 40,
   },
 });
