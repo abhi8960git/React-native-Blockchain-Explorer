@@ -14,9 +14,47 @@ import {
 import { useWalletStore } from "../../src/stores/wallet-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useWallet } from "../../src/hooks/useWallet";
 
+function ConnectButton({
+  connected,
+  connecting,
+  publicKey,
+  onConnect,
+  onDisconnect,
+}: {
+  connected: boolean;
+  connecting: boolean;
+  publicKey: string | null;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  if (connecting) {
+    return (
+      <View style={s.connectBtn}>
+        <ActivityIndicator size="small" color="#14F195" />
+        <Text style={s.connectBtnText}>Connecting...</Text>
+      </View>
+    );
+  }
+  if (connected && publicKey) {
+    return (
+      <TouchableOpacity style={[s.connectBtn, s.connectedBtn]} onPress={onDisconnect}>
+        <View style={s.connectedDot} />
+        <Text style={s.connectedBtnText}>
+          {publicKey.slice(0, 4)}...{publicKey.slice(-4)}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <TouchableOpacity style={s.connectBtn} onPress={onConnect}>
+      <Ionicons name="wallet-outline" size={14} color="#000" />
+      <Text style={s.connectBtnText}>Connect</Text>
+    </TouchableOpacity>
+  );
+}
 
- 
 export default function WalletScreen() {
   const router = useRouter();
   const [input, setInput] = useState("");
@@ -24,7 +62,7 @@ export default function WalletScreen() {
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [listData, setListData] = useState<ListItem[] | null>(null);
-
+const wallet = useWallet();
    const addToHistory = useWalletStore((s) => s.addToHistory);
   const searchHistory = useWalletStore((s) => s.searchHistory);
   const isDevnet = useWalletStore((s) => s.isDevnet);
@@ -164,6 +202,18 @@ type ListItem =
           <Text style={s.devnetText}>🔧 DEVNET</Text>
         </View>
       )}
+
+            <View style={s.header}>
+        <Text style={s.title}>SolScan</Text>
+        <ConnectButton
+          connected={wallet.connected}
+          connecting={wallet.connecting}
+          publicKey={wallet.publicKey?.toBase58() ?? null}
+          onConnect={wallet.connect}
+          onDisconnect={wallet.disconnect}
+        />
+      </View>
+
 
 
       <View style={s.searchRow}>
@@ -422,5 +472,46 @@ const s = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 40,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  title: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  connectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#14F195",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  connectBtnText: {
+    color: "#000000",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  connectedBtn: {
+    backgroundColor: "#1A1A24",
+    borderWidth: 1,
+    borderColor: "#14F19550",
+  },
+  connectedBtnText: {
+    color: "#14F195",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  connectedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#14F195",
   },
 });
